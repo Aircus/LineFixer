@@ -1,49 +1,107 @@
-# 🧬 LineFixer v1.0.0  
-**Smart Text Tool for Microbiologists**  
-Created by **Tong**  
-[GitHub Repository](https://github.com/Aircus/LineFixer)
+# 🧬 LineFixer
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows%20|%20Linux-lightgrey)]()
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)]()
+
+## 🚀 Overview
+**LineFixer** is a cross-platform desktop tool built for scientists and writers who often copy text from PDFs.  
+It **removes unwanted line breaks** while preserving paragraph spacing, making your text instantly ready for reuse in manuscripts or reports.
+
+### 🌟 Microbiologist Mode
+The standout feature, **Microbiologist Mode**, integrates the latest **NCBI Taxonomy** to:
+- 🔹 Automatically detect and *italicize* microbial **genus** and **species** names  
+- 🔹 Ensure consistent scientific formatting  
+- 🔹 Update taxonomy lists with one click  
+
+No more manual edits — LineFixer helps you stay accurate and efficient.
 
 ---
 
-## 🚀 Overview  
-**LineFixer** is a macOS desktop app designed to clean and format text copied from PDFs — perfect for scientific writing.  
-It automatically removes unwanted line breaks while preserving paragraph structure, and in *Microbiologist Mode*, it italicizes microbial genus and species names based on the latest **NCBI Taxonomy**.
+## 💡 Key Features
+- 🧹 Clean up broken lines from pasted PDF text  
+- 🧬 Auto-italicize *genus* and *species* names  
+- 🔄 One-click taxonomy updates  
+- 💻 Works on **macOS**, **Windows**, and **Linux**
 
 ---
 
-## ✨ Key Features  
-- 🧹 **Clean & Copy** – Instantly remove line breaks and copy plain text  
-- 🔬 **Microbiologist Mode** – Auto-detect and italicize *Genus* and *Genus species*  
-- 🧠 **NCBI Taxonomy Integration** – Built-in updater to fetch genus, species, and strain names  
-- 🧭 **Taxonomy Update Button** – One-click refresh with progress bar and status  
-- 🧩 **Family-level Filter** – Avoid false italics for families (*-aceae*, *-idae*, etc.)  
-- 🖋️ **RTF Clipboard Output** – Pasting into Word preserves italics  
+## ⚙️ Installation
+
+### 💻 Option 1: macOS App
+Download the latest `.dmg` installer from the [Releases](https://github.com/Aircus/LineFixer/releases) page.  
+Drag **LineFixer.app** into your **Applications** folder and run it directly.
+
+### 🐍 Option 2: Run from Source
+If you prefer to run it from source:
+
+```bash
+git clone https://github.com/Aircus/LineFixer.git
+cd LineFixer
+pip install -r requirements.txt
+python3 linefixer.py
+```
 
 ---
 
-## 🧰 How to Use  
-1. Paste copied PDF text into the **input box**  
-2. Click **Clean & Copy** to remove unwanted line breaks  
-3. Or click **Microbiologist Mode** to:  
-   - Clean text  
-   - Italicize microbial names  
-   - Copy RTF to clipboard  
-4. Paste directly into **Word** or any **RTF-compatible editor**
+## 🧭 Usage
+1. **Paste** text copied from a PDF into LineFixer.  
+2. Click **Fix Line Breaks** to clean the text.  
+3. (Optional) Toggle **Microbiologist Mode** to automatically *italicize* genus and species names.  
+4. Use **Update Taxonomy** to fetch the latest list from NCBI.  
+5. Click **Copy Output** to paste the formatted text into your document.
 
 ---
 
-## 🔄 Update Taxonomy  
-Click **Update Taxonomy** to fetch the latest **NCBI Taxonomy** (`new_taxdump.zip`)  
+## 📦 Dependencies
+The main dependencies include:
+- `tkinter`
+- `pandas`
+- `requests`
 
-The app will:  
-- Download and extract the archive  
-- Parse genus, species, and strain names  
-- Exclude family-level taxa (*-aceae*, *-idae*, etc.)  
-- Automatically reload the taxonomy list  
-- Show the **update date** and **total name count**
+You can install all dependencies with:
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
-## 🧠 Example  
+## 🤝 Contributing
+Contributions are welcome!  
+If you'd like to add features, improve taxonomy recognition, or fix bugs:
+1. Fork the repo  
+2. Create a new branch (`git checkout -b feature/new-feature`)  
+3. Commit your changes (`git commit -m "Add new feature"`)  
+4. Push and open a Pull Request
 
-**Input:**  
+---
+
+## 🧑‍💻 Author
+Developed by **Tong**, Researcher at the Swedish University of Agricultural Sciences (SLU).  
+For questions or suggestions, feel free to open an issue.
+
+---
+
+## 🖼️ Screenshots
+
+### 🧭 Main Interface
+<p align="center">
+  <img src="assets/screenshot_main.png" alt="LineFixer main interface" width="600"/>
+</p>
+
+### 🧬 Microbiologist Mode
+<p align="center">
+  <img src="assets/screenshot_microbiologist_mode.png" alt="Microbiologist Mode example" width="600"/>
+</p>
+
+### 🔄 Taxonomy Update
+<p align="center">
+  <img src="assets/screenshot_update_taxonomy.png" alt="Update taxonomy example" width="600"/>
+</p>
+
+> 🖼️ You can replace these placeholder images later by placing your own screenshots in an `assets/` folder within the repository.
+
+---
+
+## 🪪 License
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
