@@ -1,166 +1,50 @@
-# LineFixer v1.0.0 • Created by Tong
+#!/usr/bin/env python3
 import tkinter as tk
-from tkinter import scrolledtext, messagebox, ttk
-import tkinter.font as tkfont
-import re, os, zipfile, datetime, threading, time, requests, warnings
+from tkinter import scrolledtext, messagebox, font
+import os, re, requests, pandas as pd, threading, datetime, tarfile
 
-warnings.filterwarnings("ignore", message="Unverified HTTPS request")
+# ---------- App storage path ----------
+def app_data_path(name: str) -> str:
+    base = os.path.expanduser("~/Library/Application Support/LineFixer")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, name)
 
-VERSION_TEXT = "Version 1.0.0 • Created by Tong"
+GENUS_FILE = app_data_path("genus_list.txt")
 
-COMMON_CAP_WORDS = {
+# ---------- Default taxon names ----------
+def load_names():
+    if os.path.exists(GENUS_FILE):
+        with open(GENUS_FILE, "r", encoding="utf-8") as f:
+            return {ln.strip() for ln in f if ln.strip()}
+    return {
+        "Escherichia","Bacillus","Methanothrix","Methanocorpusculum",
+        "Sphingobium","Marivita","Roseobacter","Aquaspirillum",
+        "Cloacibacterium","Smithella","Cloacimonas","Pseudarcobacter"
+    }
+
+NAMES = load_names()
+
+STOPWORDS_CAP = {
     "A","An","The","This","That","These","Those","It","Its","They","Their","We","Our",
-    "In","On","At","From","To","For","With","By","As","Of","And","Or","But","If","When",
-    "Although","While","Beyond","During","Before","After","Within","Between","Because",
-    "Bayesian","Naive","KernelExplainer","SHAP","Fig"
+    "You","Your","In","On","At","From","To","For","With","By","As","Of","And","Or","But",
+    "If","When","While","Because","Although","Beyond","During","Before","After","Within",
+    "Between","Figure","Fig","Table","Supplementary","Methods","Results","Discussion",
+    "Introduction","Conclusion"
 }
 
-# Family/Order suffixes to ignore
-FAMILY_SUFFIXES = (
-    "aceae","idae","viridae","mycetes","phyceae","mycotina","opsida","ales"
-)
+FAMILY_SUFFIXES = ("aceae","idae")
 
-START, END = "\x01", "\x02"
+# ---------- Clean pasted text ----------
+def clean_text(text: str) -> str:
+    replacements = {
+        "‘": "'", "’": "'", "‚": ",",
+        "“": '"', "”": '"', "´": "'", "`": "'",
+        "–": "-", "—": "-", "…": "...",
+        "\xa0": " ",
+    }
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
 
-GENERA_SET = set()
-BINOMIAL_SET = set()
-
-def update_taxonomy():
-    def is_valid_taxon_name(name: str) -> bool:
-        if not name:
-            return False
-        name = name.replace("‘","'").replace("’","'").replace("“",'"').replace("”",'"')
-        if " " in name and name.split(" ",1)[0] in COMMON_CAP_WORDS:
-            return False
-        return re.fullmatch(r"[A-Z][a-z]{2,}(?: [a-z][a-z-]{2,})?", name) is not None
-
-    def task():
-        try:
-            progress_var.set(10)
-            status_label.config(text="Downloading taxonomy files...", fg="blue")
-            root.update_idletasks()
-
-            url = "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/new_taxdump/new_taxdump.zip"
-            local_zip = os.path.join(os.path.expanduser("~"), "Desktop", "new_taxdump.zip")
-
-            for attempt in range(3):
-                try:
-                    r = requests.get(url, stream=True, timeout=180, verify=False)
-                    r.raise_for_status()
-                    break
-                except Exception as e:
-                    if attempt == 2:
-                        raise e
-                    time.sleep(3)
-
-            total = int(r.headers.get('content-length', 0))
-            downloaded = 0
-            with open(local_zip, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total:
-                            progress = int(10 + (downloaded / total) * 30)
-                            progress_var.set(min(progress, 40))
-                            root.update_idletasks()
-
-            progress_var.set(45)
-            status_label.config(text="Extracting files...", fg="blue")
-            root.update_idletasks()
-
-            extract_dir = os.path.join(os.path.dirname(local_zip), "taxdump")
-            os.makedirs(extract_dir, exist_ok=True)
-            with zipfile.ZipFile(local_zip, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-
-            progress_var.set(60)
-            status_label.config(text="Parsing taxonomy...", fg="blue")
-            root.update_idletasks()
-
-            target_ranks = {"genus", "species", "strain"}
-            selected_ids = set()
-            with open(os.path.join(extract_dir, "nodes.dmp"), encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    parts = [p.strip() for p in line.split("|")]
-                    if len(parts) > 2 and parts[2].lower() in target_ranks:
-                        selected_ids.add(parts[0])
-
-            taxon_names = []
-            with open(os.path.join(extract_dir, "names.dmp"), encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    parts = [p.strip() for p in line.split("|")]
-                    if len(parts) > 3 and parts[3].lower() == "scientific name" and parts[0] in selected_ids:
-                        nm = parts[1]
-                        if is_valid_taxon_name(nm):
-                            taxon_names.append(nm)
-
-            taxon_names = sorted(set(taxon_names))
-            with open("genus_list.txt", "w", encoding="utf-8") as f:
-                f.write("\n".join(taxon_names))
-
-            reload_taxonomy()
-
-            progress_var.set(100)
-            date_str = datetime.date.today().isoformat()
-            status_label.config(
-                text=f"Last updated: {date_str} (genera: {len(GENERA_SET)}, binomials: {len(BINOMIAL_SET)})",
-                fg="green"
-            )
-            messagebox.showinfo(
-                "LineFixer",
-                f"Taxonomy list updated successfully.\nGenera: {len(GENERA_SET)}\nBinomials: {len(BINOMIAL_SET)}"
-            )
-
-        except Exception as e:
-            status_label.config(text="Update failed", fg="red")
-            messagebox.showerror("LineFixer", f"Update failed: {e}")
-
-        finally:
-            try: os.remove(local_zip)
-            except Exception: pass
-            time.sleep(0.3)
-            progress_var.set(0)
-            root.update_idletasks()
-
-    threading.Thread(target=task).start()
-
-def sanitize_loaded_name(name: str) -> bool:
-    if not name:
-        return False
-    if " " in name and name.split(" ",1)[0] in COMMON_CAP_WORDS:
-        return False
-    return re.fullmatch(r"[A-Z][a-z]{2,}(?: [a-z][a-z-]{2,})?", name) is not None
-
-def load_taxonomy_sets():
-    builtin = {"Escherichia","Bacillus","Methanothrix","Methanocorpusculum","Sphingobium"}
-    genera = set(builtin)
-    binomials = set()
-    path = "genus_list.txt"
-    if os.path.exists(path):
-        with open(path,"r",encoding="utf-8") as f:
-            for raw in f:
-                name = raw.strip()
-                if not name or not sanitize_loaded_name(name):
-                    continue
-                tokens = name.split()
-                if len(tokens) >= 1:
-                    g = tokens[0]
-                    if g not in COMMON_CAP_WORDS:
-                        genera.add(g)
-                if len(tokens) >= 2:
-                    pair = tokens[0] + " " + tokens[1]
-                    binomials.add(pair)
-    print(f"Loaded taxonomy: genera={len(genera)}, binomials={len(binomials)}")
-    return genera, binomials
-
-def reload_taxonomy():
-    global GENERA_SET, BINOMIAL_SET
-    GENERA_SET, BINOMIAL_SET = load_taxonomy_sets()
-
-reload_taxonomy()
-
-def clean_text(text):
     lines = text.splitlines()
     out = []
     for i, line in enumerate(lines):
@@ -168,142 +52,217 @@ def clean_text(text):
         if not s:
             out.append("\n")
         else:
-            if i < len(lines)-1 and lines[i+1].strip() and not s.endswith(('.',':',';')):
+            if i < len(lines)-1 and lines[i+1].strip() and not s.endswith(('.',':',';','?','!')):
                 s += " "
             out.append(s)
     return "".join(out)
 
-def mark_italics(text):
-    t = text
+# ---------- Token helpers ----------
+def _split_token(tok: str):
+    m = re.match(r'^(\W*)([A-Za-z][A-Za-z0-9_-]*)(\W*)$', tok)
+    if m:
+        return m.group(1), m.group(2), m.group(3)
+    return ("", tok, "")
 
-    full_pat = re.compile(r"\b([A-Z][a-z]{2,})\s+([a-z][a-z-]{2,})\b")
-    def sub_full(m):
-        g, s = m.group(1), m.group(2)
-        if g not in COMMON_CAP_WORDS:
-            pair = f"{g} {s}"
-            if pair in BINOMIAL_SET:
-                return f"{START}{g} {s}{END} "
-        return m.group(0)
-    t = full_pat.sub(sub_full, t)
+# ---------- Italicization logic ----------
+def italicize_with_markers(text: str) -> str:
+    tokens = text.split()
+    parts = [_split_token(t) for t in tokens]
+    ital = [False] * len(parts)
 
-    genus_only_pat = re.compile(r"(?<!\x01)\b([A-Z][a-z]{2,})\b")
-    def sub_genus(m):
-        g = m.group(1)
-        if g in COMMON_CAP_WORDS or g.endswith(FAMILY_SUFFIXES):
-            return m.group(0)
-        if g in GENERA_SET:
-            return f"{START}{g}{END} "
-        return m.group(0)
-    t = genus_only_pat.sub(sub_genus, t)
+    STOP_NEXT = {
+        "belongs","possesses","occurs","exists","contains","represents",
+        "was","were","is","are","be","been","being",
+        "has","have","had","does","did","done","doing",
+        "can","could","may","might","shall","should","will","would",
+        "must","also","and","or","of","in","on","to","for","with",
+        "family","genus","species","strain"
+    }
 
-    t = re.sub(r'\s{2,}', ' ', t)
-    t = re.sub(r'\s+([,.;:])', r'\1', t)
-    return t
+    for i, (_, core, _) in enumerate(parts):
+        if not core or core in STOPWORDS_CAP or core.endswith(FAMILY_SUFFIXES):
+            continue
 
-def compute_preview(marked):
-    plain, ital = [], []
-    i = 0
-    while i < len(marked):
-        if marked.startswith(START, i):
-            start = len(plain); i += len(START)
-        elif marked.startswith(END, i):
-            ital.append((start, len(plain))); i += len(END)
-        else:
-            plain.append(marked[i]); i += 1
-    return "".join(plain), ital
+        if core in NAMES:
+            # Genus + species (next lowercase token not stopword)
+            if i + 1 < len(parts):
+                nxt = parts[i + 1][1]
+                if (
+                    nxt and nxt.islower() and re.fullmatch(r"[a-z][a-z-]{2,}", nxt)
+                    and nxt not in STOP_NEXT
+                ):
+                    ital[i] = True
+                    ital[i + 1] = True
+                    continue
+            ital[i] = True
 
-def escape_rtf(s):
-    s = (s.replace('‘', "'").replace('’', "'")
-           .replace('“', '"').replace('”', '"')
-           .replace('–', '-').replace('—', '-')
-           .replace('…', '...'))
-    s = s.replace('\\', r'\\').replace('{', r'\{').replace('}', r'\}')
-    s = s.replace('\n', r'\par ' + '\n')
-    return s
-
-def to_rtf(marked):
     out = []
-    i = 0
-    while i < len(marked):
-        if marked.startswith(START, i):
-            out.append(r'\i '); i += len(START)
-        elif marked.startswith(END, i):
-            out.append(r'\i0'); i += len(END)
-        else:
-            out.append(escape_rtf(marked[i])); i += 1
-    return r'{\rtf1\ansi ' + ''.join(out) + '}'
+    for (pre, core, post), it in zip(parts, ital):
+        token = pre + (f"*{core}*" if it else core) + post
+        out.append(token)
+    return " ".join(out)
 
-def copy_rtf_and_plain(rtf, plain):
+# ---------- Marker conversion ----------
+def strip_markers_and_ranges(s: str):
+    plain = []
+    ranges = []
+    i = 0
+    in_it = False
+    start = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "*":
+            if not in_it:
+                start = len(plain); in_it = True
+            else:
+                ranges.append((start, len(plain))); in_it = False
+            i += 1
+        else:
+            plain.append(ch); i += 1
+    if in_it:
+        ranges.append((start, len(plain)))
+    return "".join(plain), ranges
+
+def _rtf_escape(ch: str) -> str:
+    if ch in ["\\","{","}"]:
+        return "\\" + ch
+    if ch == "\n":
+        return r"\par " + "\n"
+    if ord(ch) > 127:
+        return f"\\u{ord(ch)}?"
+    return ch
+
+def build_rtf_from_plain_and_ranges(plain: str, ranges):
+    marks = []
+    for s, e in ranges:
+        marks.append((s, r"\i "))
+        marks.append((e, r"\i0 "))
+    marks.sort(key=lambda x: x[0])
+    out = []
+    mi = 0
+    for idx, ch in enumerate(plain):
+        while mi < len(marks) and marks[mi][0] == idx:
+            out.append(marks[mi][1]); mi += 1
+        out.append(_rtf_escape(ch))
+    while mi < len(marks):
+        out.append(marks[mi][1]); mi += 1
+    return r"{\rtf1 " + "".join(out) + "}"
+
+# ---------- Clipboard ----------
+def copy_rtf_and_plain(rtf: str, plain: str):
     try:
         from AppKit import NSPasteboard
+        from Foundation import NSData
         pb = NSPasteboard.generalPasteboard()
         pb.clearContents()
-        pb.setString_forType_(rtf, "public.rtf")
+        data = rtf.encode("utf-8")
+        nsdata = NSData.dataWithBytes_length_(data, len(data))
+        pb.setData_forType_(nsdata, "public.rtf")
         pb.setString_forType_(plain, "public.utf8-plain-text")
+        return True
     except Exception:
-        import pyperclip; pyperclip.copy(plain)
+        try:
+            import pyperclip; pyperclip.copy(plain)
+        except Exception:
+            pass
+        return False
 
-def process_standard():
-    raw = input_text.get("1.0", tk.END)
-    cleaned = clean_text(raw)
-    output_text.config(state="normal")
-    output_text.delete("1.0", tk.END)
-    output_text.insert(tk.END, cleaned)
-    output_text.config(state="disabled")
+# ---------- Update taxonomy ----------
+def update_taxonomy():
+    status_label.config(text="Updating taxonomy...")
+    def run():
+        try:
+            url = "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz"
+            tar_path = app_data_path("new_taxdump.tar.gz")
+            out_dir = app_data_path("taxdump")
+            os.makedirs(out_dir, exist_ok=True)
+            r = requests.get(url, stream=True, timeout=90)
+            r.raise_for_status()
+            total = int(r.headers.get("content-length", 0))
+            with open(tar_path, "wb") as f:
+                done = 0
+                for chunk in r.iter_content(1024*1024):
+                    if chunk:
+                        f.write(chunk); done += len(chunk)
+                        pct = done*100/total if total else 0
+                        status_label.config(text=f"Downloading taxonomy... {pct:.1f}%")
+            with tarfile.open(tar_path, "r:gz") as tar:
+                tar.extractall(out_dir)
+            def parse_dmp(path, ncols):
+                df = pd.read_csv(path, sep="|", header=None, usecols=range(ncols), engine="python")
+                return df.apply(lambda x: x.astype(str).str.strip())
+            names = parse_dmp(os.path.join(out_dir, "names.dmp"), 4)
+            names.columns = ["tax_id","name_txt","unique_name","class"]
+            nodes = parse_dmp(os.path.join(out_dir, "nodes.dmp"), 3)
+            nodes.columns = ["tax_id","parent","rank"]
+            merged = pd.merge(names, nodes, on="tax_id", how="left")
+            taxa = merged.loc[merged["rank"].isin(["genus","species","strain"]), "name_txt"].dropna().unique()
+            taxa = [t.strip() for t in taxa]
+            with open(GENUS_FILE, "w", encoding="utf-8") as f:
+                for t in taxa:
+                    f.write(t + "\n")
+            global NAMES
+            NAMES = set(taxa)
+            status_label.config(text=f"✅ Update completed: {len(NAMES)} names ({datetime.date.today()})")
+            messagebox.showinfo("LineFixer", f"Taxonomy updated.\nSaved {len(NAMES)} names.")
+        except Exception as e:
+            status_label.config(text=f"❌ Update failed: {e}")
+            messagebox.showerror("LineFixer", f"Update failed:\n{e}")
+    threading.Thread(target=run, daemon=True).start()
+
+# ---------- Actions ----------
+def do_clean_and_copy():
+    text = input_box.get("1.0", tk.END)
+    cleaned = clean_text(text)
     try:
         import pyperclip; pyperclip.copy(cleaned)
-    except: pass
-    messagebox.showinfo("LineFixer", "Cleaned text copied.")
+    except Exception:
+        pass
+    output_box.config(state="normal")
+    output_box.delete("1.0", tk.END)
+    output_box.insert(tk.END, cleaned)
+    output_box.config(state="disabled")
+    messagebox.showinfo("LineFixer", "Cleaned text copied to clipboard.")
 
-def process_microbiologist_mode():
-    raw = input_text.get("1.0", tk.END)
-    cleaned = clean_text(raw)
-    marked = mark_italics(cleaned)
-    plain, italics = compute_preview(marked)
-    output_text.config(state="normal")
-    output_text.delete("1.0", tk.END)
-    output_text.insert(tk.END, plain)
-    output_text.tag_configure("italic", font=ITALIC_FONT)
-    for s, e in italics:
-        output_text.tag_add("italic", f"1.0+{s}c", f"1.0+{e}c")
-    output_text.config(state="disabled")
-    copy_rtf_and_plain(to_rtf(marked), plain)
-    messagebox.showinfo("LineFixer", "RTF copied with italics.")
+def do_micro_mode():
+    text = input_box.get("1.0", tk.END)
+    cleaned = clean_text(text)
+    marked = italicize_with_markers(cleaned)
+    plain, ranges = strip_markers_and_ranges(marked)
+    rtf = build_rtf_from_plain_and_ranges(plain, ranges)
+    output_box.config(state="normal")
+    output_box.delete("1.0", tk.END)
+    output_box.insert(tk.END, plain)
+    output_box.tag_configure("i", font=(DEFAULT_FONT.cget("family"), DEFAULT_FONT.cget("size"), "italic"))
+    for s, e in ranges:
+        output_box.tag_add("i", f"1.0+{s}c", f"1.0+{e}c")
+    output_box.config(state="disabled")
+    copied_rich = copy_rtf_and_plain(rtf, plain)
+    if copied_rich:
+        messagebox.showinfo("LineFixer", "RTF copied with italics. Paste into Word/Pages.")
+    else:
+        messagebox.showwarning("LineFixer", "Copied plain text only. Install 'pyobjc' for rich paste.")
 
-def clear_input():
-    input_text.delete("1.0", tk.END)
+def do_clear():
+    input_box.delete("1.0", tk.END)
 
+# ---------- GUI ----------
 root = tk.Tk()
-root.title("LineFixer v1.0.0")
-root.geometry("940x720")
-root.lift(); root.focus_force()
-
-DEFAULT_FONT = tkfont.nametofont("TkDefaultFont")
-ITALIC_FONT = DEFAULT_FONT.copy(); ITALIC_FONT.configure(slant="italic")
-
-tk.Button(root, text="Clear Input", width=16, command=clear_input).pack(pady=(10,0))
-tk.Button(root, text="Update Taxonomy", width=16, command=update_taxonomy).pack(pady=(5,5))
-
-progress_var = tk.IntVar(value=0)
-progress = ttk.Progressbar(root, length=200, variable=progress_var, mode='determinate')
-progress.pack(pady=(0,5))
-
-status_label = tk.Label(root, text="Last updated: (not yet)", fg="gray")
-status_label.pack()
-
-tk.Label(root, text="Paste original PDF text:").pack()
-input_text = scrolledtext.ScrolledText(root, height=13, font=DEFAULT_FONT)
-input_text.pack(fill=tk.BOTH, padx=10, pady=5, expand=True)
-
-row = tk.Frame(root); row.pack(pady=6)
-tk.Button(row, text="Clean & Copy", width=18, command=process_standard).pack(side=tk.LEFT, padx=6)
-tk.Button(row, text="Microbiologist Mode", width=18,
-          command=lambda: [root.focus_force(), process_microbiologist_mode()]).pack(side=tk.LEFT, padx=6)
-
-tk.Label(root, text="Preview:").pack()
-output_text = scrolledtext.ScrolledText(root, height=13, font=DEFAULT_FONT)
-output_text.pack(fill=tk.BOTH, padx=10, pady=5, expand=True)
-output_text.config(state="disabled")
-
-tk.Label(root, text=VERSION_TEXT, fg="gray").pack(pady=(6,12))
+root.title("LineFixer v1.0.0 — Created by Tong")
+root.geometry("900x680")
+DEFAULT_FONT = font.nametofont("TkDefaultFont")
+tk.Button(root, text="Clear Input", command=do_clear).pack(pady=(10,4))
+tk.Button(root, text="Update Taxonomy", command=update_taxonomy).pack(pady=(0,6))
+status_label = tk.Label(root, text="Ready.", anchor="w")
+status_label.pack(fill="x", padx=8)
+tk.Label(root, text="Input Text:").pack(anchor="w", padx=8)
+input_box = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=100, height=12)
+input_box.pack(padx=8, pady=4, fill="both", expand=False)
+btn_row = tk.Frame(root); btn_row.pack(pady=6)
+tk.Button(btn_row, text="Clean & Copy", width=18, command=do_clean_and_copy).pack(side="left", padx=6)
+tk.Button(btn_row, text="Microbiologist Mode", width=18, command=do_micro_mode).pack(side="left", padx=6)
+tk.Label(root, text="Output Preview:").pack(anchor="w", padx=8)
+output_box = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=100, height=14)
+output_box.pack(padx=8, pady=4, fill="both", expand=True)
+output_box.config(state="disabled")
 root.mainloop()
