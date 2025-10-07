@@ -18,9 +18,6 @@ It automatically removes unwanted line breaks while preserving paragraph structu
 - 🧭 **Taxonomy Update Button** – One-click refresh with progress bar and status  
 - 🧩 **Family-level Filter** – Avoid false italics for families (*-aceae*, *-idae*, etc.)  
 - 🖋️ **RTF Clipboard Output** – Pasting into Word preserves italics  
-- 🪶 **English UI** – Clean, modern interface with auto-focus fix  
-- 🔄 **Version:** 1.0.0  
-- ✍️ **Created by Tong**
 
 ---
 
